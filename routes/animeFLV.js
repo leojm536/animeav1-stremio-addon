@@ -82,7 +82,7 @@ exports.UpdateAiringAnimeFile = function () {
 exports.SearchAnimeFLV = async function (query, genreArr = undefined, url = undefined, page = undefined, gottenItems = 0) {
   if (!url && !query && !genreArr) throw Error("No arguments passed to SearchAnimeFLV()")
   const animeFLVURL = (url) ? url
-    : `https%3A%2F%2Fwww3.animeflv.net%2Fbrowse%3F${(query) ? "q%3D" + encodeURIComponent(query) + "%26" : ""}${(genreArr) ? "genre%5B%5D%3D" + genreArr.join("%26genre%5B%5D%3D") : ""}${(page) ? "%26page%3D" + page : ""}`
+    : `${encodeURIComponent(ANIMEFLV_BASE)}%2Fbrowse%3F${(query) ? "q%3D" + encodeURIComponent(query) + "%26" : ""}${(genreArr) ? "genre%5B%5D%3D" + genreArr.join("%26genre%5B%5D%3D") : ""}${(page) ? "%26page%3D" + page : ""}`
   /*const reqURL = `${ANIMEFLV_API_BASE}/search/by-url?url=${animeFLVURL}`
   console.log("\x1b[36mSearching:\x1b[39m", reqURL)
   return fetch(reqURL).then((resp) => {
@@ -133,7 +133,7 @@ exports.GetAnimeBySlug = async function (slug) {
         season: 1,
         episode: ep.number,
         number: ep.number,
-        thumbnail: `https://www3.animeflv.net/uploads/animes/thumbs/${matches[1]}.jpg`,
+        thumbnail: `${ANIMEFLV_BASE}/uploads/animes/thumbs/${matches[1]}.jpg`,
         released: new Date(d.setDate(d.getDate() - (epCount - ep.number))),
         available: true
       }
@@ -145,7 +145,7 @@ exports.GetAnimeBySlug = async function (slug) {
         season: 1,
         episode: epCount + 1,
         number: epCount + 1,
-        thumbnail: "https://www3.animeflv.net/assets/animeflv/img/cnt/proximo.png",
+        thumbnail: `${ANIMEFLV_BASE}/assets/animeflv/img/cnt/proximo.png`,
         released: new Date(data.data.next_airing_episode),
         available: false //next episode is not available yet
       })
