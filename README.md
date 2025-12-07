@@ -101,9 +101,9 @@ Parameters
    - [X] Get upcoming episodes with correct dates
      - [X] Get Stremio to show `UPCOMING` tags on upcoming episodes and show them on the calendar (undocumented, but reverse engineered)
    - [X] Get and display the item's related entries (prequels/sequels, spinoffs, alternative retellings...)
-   - [X] Get episode thumbnails (same for each episode atm)
+   - [X] Get episode thumbnails
+   - [X] Get series backgound images
    - [ ] Get series logos
-   - [ ] Get series backgound images
    - [ ] Get episode overviews
 - [ ] Touch up the views (the homepage, mainly)
 - [ ] Investigate Stremio API

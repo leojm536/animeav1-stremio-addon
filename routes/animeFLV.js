@@ -133,7 +133,7 @@ exports.GetAnimeBySlug = async function (slug) {
         season: 1,
         episode: ep.number,
         number: ep.number,
-        thumbnail: `https://cdn.animeflv.net/screenshots/${matches[1]}/${ep.number}/th_3.jpg`,//`${ANIMEFLV_BASE}/uploads/animes/thumbs/${matches[1]}.jpg`,
+        thumbnail: `https://cdn.animeflv.net/screenshots/${matches[1]}/${ep.number}/th_3.jpg`,
         released: new Date(d.setDate(d.getDate() - (epCount - ep.number))),
         available: true
       }
@@ -152,7 +152,7 @@ exports.GetAnimeBySlug = async function (slug) {
     }
     return {
       name: data.data.title, alternative_titles: data.data.alternative_titles, type: (data.data.type === "Anime") ? "series" : "movie",
-      videos, poster: data.data.cover, genres: data.data.genres, description: data.data.synopsis, website: data.data.url, id: `animeflv:${slug}`,
+      videos, poster: data.data.cover, background: `${ANIMEFLV_BASE}/uploads/animes/thumbs/${matches[1]}.jpg`, genres: data.data.genres, description: data.data.synopsis, website: data.data.url, id: `animeflv:${slug}`,
       language: "jpn", ...(data.data.related) && {
         links: data.data.related.map((r) => {
           return { name: r.title, category: r.relation, url: `stremio:///detail/series/animeflv:${r.slug}` }
