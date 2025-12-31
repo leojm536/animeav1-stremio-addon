@@ -157,8 +157,9 @@ exports.GetAnimeBySlug = async function (slug) {
         links: data.data.related.map((r) => {
           return { name: r.title, category: r.relation, url: `stremio:///detail/series/animeflv:${r.slug}` }
         })
-      },
-      ...(data.data.next_airing_episode !== undefined) && { behaviorHints: { hasScheduledVideos: true } }
+      }, //both behavior hints can't coexist, if there's an upcoming episode, videos.length > 1
+      ...(data.data.next_airing_episode !== undefined) && { behaviorHints: { hasScheduledVideos: true } },
+      ...(videos.length == 1) && { behaviorHints: { defaultVideoId: `animeflv:${slug}:1` } }
     }
   })
 }
