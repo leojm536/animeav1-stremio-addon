@@ -6,6 +6,8 @@ require('dotenv').config()//process.env.var
 const Metadata = require('./metadata_copy.js')
 const relationsAPI = require('./relations.js')
 const animeFLVAPI = require('./animeFLV.js')
+const animeAV1API = require('./animeav1.js')
+const fuzzysort = require('fuzzysort')
 
 /**
  * Tipical express middleware callback.
@@ -34,10 +36,27 @@ function HandleMetaRequest(req, res, next) {
       res.json({ meta: animeMeta, message: "Got AnimeFLV metadata!" })
       next()
     }).catch((err) => {
-      console.error('\x1b[31mFailed on animeFLV slug search because:\x1b[39m ' + err)
+      console.error('\x1b[31mFailed on AnimeFLV slug search because:\x1b[39m ' + err)
       if (!res.headersSent) {
         res.header('Cache-Control', "max-age=86400, stale-while-revalidate=86400, stale-if-error=259200")
-        res.json({ meta: {}, message: "Failed getting animeFLV info" });
+        res.json({ meta: {}, message: "Failed getting AnimeFLV info" });
+        next()
+      }
+    })
+  } else if (videoID?.startsWith("animeav1")){
+    const ID = idDetails[1] //We want the second part of the videoID, which is the kitsu ID
+    let episode = idDetails[2] //undefined if we don't get an episode number in the query, which is fine
+    console.log(`\x1b[33mGot a ${req.params.type} with ${videoID} ID:\x1b[39m ${ID}`)
+    animeAV1API.GetAnimeBySlug(ID).then((animeMeta) => {
+      console.log('\x1b[36mGot AnimeAV1 metadata for:\x1b[39m', animeMeta.name)
+      res.header('Cache-Control', "max-age=86400, stale-while-revalidate=86400, stale-if-error=259200")
+      res.json({ meta: animeMeta, message: "Got AnimeAV1 metadata!" })
+      next()
+    }).catch((err) => {
+      console.error('\x1b[31mFailed on AnimeAV1 slug search because:\x1b[39m ' + err)
+      if (!res.headersSent) {
+        res.header('Cache-Control', "max-age=86400, stale-while-revalidate=86400, stale-if-error=259200")
+        res.json({ meta: {}, message: "Failed getting AnimeAV1 info" });
         next()
       }
     })
@@ -92,8 +111,9 @@ function HandleMetaRequest(req, res, next) {
     }).then((metadata) => {
       const searchTerm = ((season) && (parseInt(season) !== 1)) ? `${metadata.title} ${season}` : metadata.title
       animeFLVAPI.SearchAnimeFLV(searchTerm).then((animeFLVitem) => {
-        console.log('\x1b[36mGot AnimeFLV entry:\x1b[39m', animeFLVitem[0].title)
-        return animeFLVAPI.GetAnimeBySlug(animeFLVitem[0].slug).then((animeMeta) => {
+        const result = fuzzysort.go(searchTerm, animeFLVitem, {key: 'title', limit: 1, all: true})[0]?.obj || animeFLVitem[0];
+        console.log('\x1b[36mGot AnimeFLV entry:\x1b[39m', result.title)
+        return animeFLVAPI.GetAnimeBySlug(result.slug).then((animeMeta) => {
           console.log('\x1b[36mGot AnimeFLV metadata for:\x1b[39m', animeMeta.name)
           res.header('Cache-Control', "max-age=86400, stale-while-revalidate=86400, stale-if-error=259200")
           res.json({ meta: animeMeta, message: "Got AnimeFLV metadata!" });

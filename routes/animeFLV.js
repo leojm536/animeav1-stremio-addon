@@ -23,7 +23,7 @@ exports.GetAiringAnimeFromWeb = async function () {
     const promises = data.data.map((entry) => {
       return this.GetAnimeBySlug(entry.slug).then((anime) => {
         return {
-          title: anime.name, type: (anime.type === "Anime" || anime.type === "series") ? "series" : "movie",
+          title: anime.name, type: (anime.type === "Pelicula" || anime.type === "Película" || anime.type === "Especial" || anime.type === "movie") ? "movie" : "series",
           slug: entry.slug, poster: anime.poster, overview: anime.description
         }
       })
@@ -100,7 +100,7 @@ exports.SearchAnimeFLV = async function (query, genreArr = undefined, url = unde
     if (data.data.media.length < 1) throw Error("No search results!")
     return data.data.media.slice(gottenItems).map((anime) => {
       return {
-        title: anime.title, type: (anime.type === "Anime" || anime.type === "series") ? "series" : "movie",
+        title: anime.title, type: (anime.type === "Pelicula" || anime.type === "Película" || anime.type === "Especial" || anime.type === "movie") ? "movie" : "series",
         slug: anime.slug, poster: anime.cover, overview: anime.synopsis, genres: genreArr
       }
     })
@@ -183,8 +183,8 @@ exports.GetItemStreams = async function (slug, epNumber = 1) {
     const externalStreams = data.data.servers.filter((src) => src.embed !== undefined).map((source) => {
       return {
         externalUrl: source.embed,
-        name: "AnimeFLV\n" + source.name + "⇗\n(external)",
-        title: epName + "\n⚙️ (opens " + source.name + " in your browser)\n🔗 " + source.embed,
+        name: "AnimeFLV\n" + source.name + "⇗\n(external)" + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
+        title: epName + "\n⚙️ (opens " + source.name + " in your browser)\n🔗 " + source.embed + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
         behaviorHints: {
           bingeGroup: "animeFLV|" + source.name + "|ext",
           filename: source.embed
@@ -198,8 +198,8 @@ exports.GetItemStreams = async function (slug, epNumber = 1) {
         return GetStreamTapeLink(source.download).then((realURL) => {
           return {
             url: realURL,
-            name: "AnimeFLV - " + source.name,
-            title: epName + " via " + source.name + "\n" + realURL,
+            name: "AnimeFLV - " + source.name + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
+            title: epName + " via " + source.name + "\n" + realURL + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
             behaviorHints: {
               bingeGroup: "animeFLV|" + source.name,
               filename: realURL,
@@ -214,8 +214,8 @@ exports.GetItemStreams = async function (slug, epNumber = 1) {
         return GetYourUploadLink(source.embed).then((realURL) => {
           return {
             url: realURL,
-            name: "AnimeFLV\n" + source.name,
-            title: epName + "\n⚙️ " + source.name + "\n🔗 " + realURL,
+            name: "AnimeFLV\n" + source.name + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
+            title: epName + "\n⚙️ " + source.name + "\n🔗 " + realURL + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
             behaviorHints: {
               bingeGroup: "animeFLV|" + source.name,
               filename: realURL,
@@ -281,7 +281,17 @@ async function GetEpisodeLinks(slug, epNumber = 1) {
         episodeLinks.servers.push({
           name: s?.title,
           download: s?.url?.replace("mega.nz/#!", "mega.nz/file/"),
-          embed: s?.code?.replace("mega.nz/embed#!", "mega.nz/embed/")
+          embed: s?.code?.replace("mega.nz/embed#!", "mega.nz/embed/"),
+          dub: false
+        });
+      }
+      const dubs = JSON.parse(serversObj).DUB || [];
+      for (const s of dubs) {
+        episodeLinks.servers.push({
+          name: s?.title,
+          download: s?.url?.replace("mega.nz/#!", "mega.nz/file/"),
+          embed: s?.code?.replace("mega.nz/embed#!", "mega.nz/embed/"),
+          dub: true
         });
       }
     }
@@ -339,14 +349,15 @@ async function GetAnimeInfo(slug) {
 
     const episodesFind = scripts.map((_, el) => $(el).html()).get().find(script => script?.includes("var episodes ="));
     const episodesArray = episodesFind?.match(/episodes = (\[\[.*\].*])/)?.[1];
-
-    if (episodesArray) {
-      for (let i = 1; i <= JSON.parse(episodesArray)?.length; i++) {
+    
+    const epObj = JSON.parse(episodesArray)
+    if (epObj) {
+      for (ep of epObj) {
         if (animeInfo.episodes instanceof Array) {
           animeInfo.episodes.push({
-            number: i,
-            slug: slug + "-" + i,
-            url: ANIMEFLV_BASE + "/ver/" + slug + "-" + i
+            number: ep[0],
+            slug: slug + "-" + ep[0],
+            url: ANIMEFLV_BASE + "/ver/" + slug + "-" + ep[0]
           });
         }
       }

@@ -23,12 +23,28 @@ function ReadManifest() {
     let manifest = {
       "id": 'com.' + packageJSON.name.replaceAll('-', '.'),
       "version": packageJSON.version,
-      "name": "AnimeFLV",
+      "name": "AnimeFLV & AnimeAV1",
       "logo": "https://play-lh.googleusercontent.com/ZIjIwO5FJe9R1rplSd4uz54OwBxQhwDcznjljSPl2MgHaCoyF3qG6R4kRMCB40f4l2A=w256",
       "description": packageJSON.description,
       "catalogs": [
         {
           id: "animeflv", type: "AnimeFLV", name: "search results",
+          extra: [{ name: "search", isRequired: true },
+          {
+            name: "genre",
+            options: ["accion", "artes-marciales", "aventura", "carreras", "ciencia-ficcion", "comedia",
+              "demencia", "demonios", "deportes", "drama", "ecchi", "escolares", "espacial", "fantasia",
+              "harem", "historico", "infantil", "josei", "juegos", "magia", "mecha", "militar", "misterio",
+              "musica", "parodia", "policia", "psicologico", "recuentos-de-la-vida", "romance", "samurai",
+              "seinen", "shoujo", "shounen", "sobrenatural", "superpoderes", "suspenso", "terror", "vampiros",
+              "yaoi", "yuri"],
+            optionsLimit: 1, isRequired: false
+          },
+          { name: "skip", isRequired: false }
+          ]
+        },
+        {
+          id: "animeav1", type: "AnimeAV1", name: "search results",
           extra: [{ name: "search", isRequired: true },
           {
             name: "genre",
@@ -60,7 +76,26 @@ function ReadManifest() {
           ]
         },
         {
+          id: "animeav1|genres", type: "AnimeAV1", name: "AnimeAV1",
+          extra: [
+            {
+              name: "genre",
+              options: ["accion", "artes-marciales", "aventura", "carreras", "ciencia-ficcion", "comedia",
+                "demencia", "demonios", "deportes", "drama", "ecchi", "escolares", "espacial", "fantasia",
+                "harem", "historico", "infantil", "josei", "juegos", "magia", "mecha", "militar", "misterio",
+                "musica", "parodia", "policia", "psicologico", "recuentos-de-la-vida", "romance", "samurai",
+                "seinen", "shoujo", "shounen", "sobrenatural", "superpoderes", "suspenso", "terror", "vampiros",
+                "yaoi", "yuri"],
+              optionsLimit: 1, isRequired: true
+            },
+            { name: "skip", isRequired: false }
+          ]
+        },
+        {
           id: "animeflv|onair", type: "AnimeFLV", name: "On Air"
+        },
+        {
+          id: "animeav1|onair", type: "AnimeAV1", name: "On Air"
         },
         {
           type: "series",
@@ -95,6 +130,7 @@ function ReadManifest() {
       "idPrefixes": [
         "tt",
         "animeflv:",
+        "animeav1:",
         "tmdb:",
         "anilist:",
         "kitsu:",
@@ -173,8 +209,21 @@ app.use(catalog);
 
 app.listen(process.env.PORT || 3000, () => {
   console.log(`\x1b[32manimeflv-stremio-addon is listening on port ${process.env.PORT || 3000}\x1b[39m`)
+  if(process.argv.includes('--launch')){
+    const OSC = '\u001B]';
+    const BEL = '\u0007';
+    const url = `${OSC}8;;stremio://127.0.0.1:${process.env.PORT || 3000}/manifest.json${BEL}Open this link to install the running addon on the Stremio app${OSC}8;;${BEL}`
+    console.log(url)
+  } else if(process.argv.includes('--webLaunch')){
+    const url = `http://127.0.0.1:${process.env.PORT || 3000}/manifest.json`
+    console.log('Open the following for a developement web Stremio session:', `https://staging.strem.io#?addonOpen=${encodeURIComponent(url)}`)
+  }
   const animeFLVAPI = require('./routes/animeFLV.js')
+  const animeAV1API = require('./routes/animeav1.js')
   animeFLVAPI.UpdateAiringAnimeFile().then(() => {
     setInterval(animeFLVAPI.UpdateAiringAnimeFile.bind(animeFLVAPI), 86400000); //Update every 24h
+  })
+  animeAV1API.UpdateAiringAnimeFile().then(() => {
+    setInterval(animeAV1API.UpdateAiringAnimeFile.bind(animeAV1API), 86400000); //Update every 24h
   })
 });

@@ -6,6 +6,8 @@ require('dotenv').config()//process.env.var
 const Metadata = require('./metadata_copy.js')
 const relationsAPI = require('./relations.js')
 const animeFLVAPI = require('./animeFLV.js')
+const animeAV1API = require('./animeav1.js')
+const fuzzysort = require('fuzzysort')
 
 /**
  * Tipical express middleware callback.
@@ -36,22 +38,25 @@ function HandleStreamRequest(req, res, next) {
   let streams = []
   const idDetails = req.params.videoId.split(':')
   const videoID = idDetails[0] //We only want the first part of the videoID, which is the IMDB ID, the rest would be the season and episode
-  if (videoID?.startsWith("animeflv")) {
-    const ID = idDetails[1] //We want the second part of the videoID, which is the kitsu ID
+  if ((videoID?.startsWith("animeflv")) || (videoID?.startsWith("animeav1"))) { //If we got an AnimeFLV or AnimeAV1 specific ID
+    const ID = idDetails[1] //We want the second part of the videoID
     let episode = idDetails[2] //undefined if we don't get an episode number in the query, which is fine
     console.log(`\x1b[33mGot a ${req.params.type} with ${videoID} ID:\x1b[39m ${ID}`)
     console.log('Extra parameters:', res.locals.extraParams)
-    animeFLVAPI.GetItemStreams(ID, episode).then((streamArr) => {
-      console.log(`\x1b[36mGot ${streamArr.length} streams\x1b[39m`)
-      res.header('Cache-Control', "max-age=86400, stale-while-revalidate=86400, stale-if-error=259200")
-      res.json({ streams: streamArr, message: "Got AnimeFLV streams!" })
-      next()
-    }).catch((err) => {
-      console.error('\x1b[31mFailed on animeFLV slug search because:\x1b[39m ' + err)
-      if (!res.headersSent) {
+    const animeFLVp = animeFLVAPI.GetItemStreams(ID, episode)
+    const animeAV1p = animeAV1API.GetItemStreams(ID, episode)
+    CombineStreams(animeFLVp, animeAV1p).then((combinedStreams)=>{
+      if (combinedStreams.length > 0) {
+        console.log(`\x1b[36mGot ${combinedStreams.length} streams\x1b[39m`)
         res.header('Cache-Control', "max-age=86400, stale-while-revalidate=86400, stale-if-error=259200")
-        res.json({ streams, message: "Failed getting animeFLV info" });
+        res.json({ streams: combinedStreams, message: "Got streams!" })
         next()
+      } else {
+        if (!res.headersSent) {
+          res.header('Cache-Control', "max-age=86400, stale-while-revalidate=86400, stale-if-error=259200")
+          res.json({ streams, message: "Failed getting Anime info" });
+          next()
+        }
       }
     })
   } else {
@@ -105,20 +110,28 @@ function HandleStreamRequest(req, res, next) {
       })
     }).then((metadata) => {
       const searchTerm = ((season) && (parseInt(season) !== 1)) ? `${metadata.title} ${season}` : metadata.title
-      animeFLVAPI.SearchAnimeFLV(searchTerm).then((animeFLVitem) => {
-        console.log('\x1b[36mGot AnimeFLV entry:\x1b[39m', animeFLVitem[0].title)
-        return animeFLVAPI.GetItemStreams(animeFLVitem[0].slug, episode).then((streamArr) => {
-          console.log(`\x1b[36mGot ${streamArr.length} streams\x1b[39m`)
+      const animeFLVp = animeFLVAPI.SearchAnimeFLV(searchTerm).then((animeFLVitem) => {
+        const result = fuzzysort.go(searchTerm, animeFLVitem, {key: 'title', limit: 1, all: true})[0]?.obj || animeFLVitem.sort((a,b)=>(a.type === req.params.type && b.type !== req.params.type)?-1:0)[0];//Sort by type to enhance matching
+        console.log('\x1b[36mGot AnimeFLV entry:\x1b[39m', result.title)
+        return animeFLVAPI.GetItemStreams(result.slug, episode)
+      })
+      const animeAV1p = animeAV1API.SearchAnimeAV1(searchTerm, req.params.type).then((animeFLVitem) => {
+        const result = fuzzysort.go(searchTerm, animeFLVitem, {key: 'title', limit: 1, all: true})[0]?.obj || animeFLVitem[0];
+        console.log('\x1b[36mGot AnimeAV1 entry:\x1b[39m', result.title)
+        return animeAV1API.GetItemStreams(result.slug, episode)
+      })
+      CombineStreams(animeFLVp, animeAV1p).then((combinedStreams)=>{
+        if (combinedStreams.length > 0) {
+          console.log(`\x1b[36mGot ${combinedStreams.length} streams\x1b[39m`)
           res.header('Cache-Control', "max-age=86400, stale-while-revalidate=86400, stale-if-error=259200")
-          res.json({ streams: streamArr, message: "Got AnimeFLV streams!" })
+          res.json({ streams: combinedStreams, message: "Got streams!" })
           next()
-        })
-      }).catch((err) => {
-        console.error('\x1b[31mFailed on animeFLV search because:\x1b[39m ' + err)
-        if (!res.headersSent) {
-          res.header('Cache-Control', "max-age=86400, stale-while-revalidate=86400, stale-if-error=259200")
-          res.json({ streams, message: "Failed getting animeFLV info" })
-          next()
+        } else {
+          if (!res.headersSent) {
+            res.header('Cache-Control', "max-age=86400, stale-while-revalidate=86400, stale-if-error=259200")
+            res.json({ streams, message: "Failed getting Anime info" });
+            next()
+          }
         }
       })
     }).catch((err) => {
@@ -168,6 +181,30 @@ function SearchParamsRegex(extraParams) {
     //console.log(paramJSON)
     return paramJSON
   } else return {}
+}
+
+function CombineStreams(animeFLVPromise, animeAV1Promise) {
+  return Promise.allSettled([animeFLVPromise, animeAV1Promise]).then((results) => {
+    let combinedStreams = []
+    if (results[0].value) {
+      console.log(`\x1b[36mGot ${results[0].value.length} AnimeFLV streams\x1b[39m`)
+      combinedStreams = combinedStreams.concat(results[0].value)
+    } else {console.error('\x1b[31mFailed on AnimeFLV slug search because:\x1b[39m ' + results[0].reason)}
+    if (results[1].value) {
+      console.log(`\x1b[36mGot ${results[1].value.length} AnimeAV1 streams\x1b[39m`)
+      lastInternalFLV = combinedStreams.findLastIndex((stream)=>stream.url !== undefined)
+      lastInternalAV1 = results[1].value.findLastIndex((stream)=>stream.url !== undefined)
+      if (lastInternalAV1 === -1) {
+        combinedStreams = combinedStreams.concat(results[1].value) //AnimeAV1 has only external links, just append at the end
+      } else if ((lastInternalAV1 !== -1) && (lastInternalFLV === -1)) {
+        combinedStreams = results[1].value.concat(combinedStreams) //AnimeFLV has only external links, prepend at the start
+      } else {
+        combinedStreams.splice(lastInternalFLV + 1, 0, ...results[1].value.slice(0, lastInternalAV1 + 1)) //Both have internal links, insert AnimeAV1 internal links after last AnimeFLV internal links
+        combinedStreams = combinedStreams.concat(results[1].value.slice(lastInternalAV1 + 1)) //Append external links at the end
+      }
+    } else {console.error('\x1b[31mFailed on AnimeAV1 slug search because:\x1b[39m ' + results[1].reason)}
+    return combinedStreams
+  })
 }
 
 module.exports = stream;
