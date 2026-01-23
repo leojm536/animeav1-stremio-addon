@@ -25,6 +25,7 @@ function ReadManifest() {
       "version": packageJSON.version,
       "name": "AnimeFLV & AnimeAV1",
       "logo": "https://play-lh.googleusercontent.com/ZIjIwO5FJe9R1rplSd4uz54OwBxQhwDcznjljSPl2MgHaCoyF3qG6R4kRMCB40f4l2A=w256",
+      "background": "https://images6.alphacoders.com/113/1135890.jpg",
       "description": packageJSON.description,
       "catalogs": [
         {
