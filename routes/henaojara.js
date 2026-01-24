@@ -1,4 +1,4 @@
-const ANIMEAV1_BASE = "https://animeav1.com"
+const HENAOJARA_BASE = "https://ww1.henaojara.net"
 
 const fsPromises = require("fs/promises");
 const cheerio = require("cheerio");
@@ -28,7 +28,7 @@ exports.GetAiringAnimeFromWeb = async function () {
 }
 
 exports.GetAiringAnime = async function () {
-  return fsPromises.readFile('./onairAV1_titles.json').then((data) => JSON.parse(data)).catch((err) => {
+  return fsPromises.readFile('./onairHENAOJARA_titles.json').then((data) => JSON.parse(data)).catch((err) => {
     console.error('\x1b[31mFailed reading titles cache:\x1b[39m ' + err)
     return this.GetAiringAnimeFromWeb() //If the file doesn't exist, get the titles from the web
   })
@@ -37,22 +37,19 @@ exports.GetAiringAnime = async function () {
 exports.UpdateAiringAnimeFile = function () {
   return this.GetAiringAnimeFromWeb().then((titles) => {
     console.log(`\x1b[36mGot ${titles.length} titles\x1b[39m, saving to cache`)
-    return fsPromises.writeFile('./onairAV1_titles.json', JSON.stringify(titles))
-  }).then(() => console.log('\x1b[32mOn Air AV1 titles "cached" successfully!\x1b[39m')
+    return fsPromises.writeFile('./onairHENAOJARA_titles.json', JSON.stringify(titles))
+  }).then(() => console.log('\x1b[32mOn Air Henaojara titles "cached" successfully!\x1b[39m')
   ).catch((err) => {
     console.error('\x1b[31mFailed "caching" titles:\x1b[39m ' + err)
   })
 }
 
-exports.SearchAnimeAV1 = async function (query, type = undefined, genreArr = undefined, url = undefined, page = undefined, gottenItems = 0) {
-  if (!url && !query && !genreArr) throw Error("No arguments passed to SearchAnimeAV1()")
-  if (type) {
-    type = (type === "movie") ? "category%3Dpelicula%26" : "category%3Dtv-anime%26category%3Dova%26category%3Despecial%26"
-  }
-//https://animeav1.com/catalogo?search=one-piece&category=tv-anime&genre=accion&page=2
-  const animeAV1URL = (url) ? url
-    : `${encodeURIComponent(ANIMEAV1_BASE)}%2Fcatalogo%3F${(query) ? "search%3D" + encodeURIComponent(query) + "%26" : ""}${(type) ? type : ""}${(genreArr) ? "genre%3D" + genreArr.join("%26genre%3D") : ""}${(page) ? "%26page%3D" + page : ""}`
-  return SearchAnimesBySpecificURL(animeAV1URL).then((data) => {
+exports.SearchHenaojara = async function (query, genreArr = undefined, url = undefined, page = undefined, gottenItems = 0) {
+  if (!url && !query && !genreArr) throw Error("No arguments passed to SearchHenaojara()")
+  const henaojaraURL = (url) ? url
+    : `${encodeURIComponent(HENAOJARA_BASE)}%2Fanimes%3F${(query) ? "buscar%3D" + encodeURIComponent(query).replaceAll('%20','+') + "%26" : ""}${(genreArr) ? encodeURIComponent("genero%3D" + genreArr.join("%2C")) : ""}${(page) ? "%26page%3D" + page : ""}`
+  console.log("Henaojara Search URL:", henaojaraURL)
+    return SearchAnimesBySpecificURL(henaojaraURL).then((data) => {
     if (!data) throw Error("Invalid response!")
     return { data }
   }).then((data) => {
@@ -75,29 +72,27 @@ exports.GetAnimeBySlug = async function (slug) {
     if (data?.data === undefined) throw Error("Invalid response!")
     //return first result
     const epCount = data.data.episodes.length
-    const imgPattern = /\/(\d+).jpg$/g
-    const matches = imgPattern.exec(data.data.cover)
     const videos = data.data.episodes.map((ep) => {
       let d = new Date(Date.now())
       return {
-        id: `animeav1:${slug}:${ep.number}`,
+        id: `henaojara:${slug}:${ep.number}`,
         title: data.data.title + " Ep. " + ep.number,
         season: 1,
         episode: ep.number,
         number: ep.number,
-        thumbnail: `https://cdn.animeav1.com/screenshots/${matches[1]}/${ep.number}.jpg`,//`https://cdn.animeflv.net/screenshots/${matches[1]}/${ep.number}/th_3.jpg`,
+        thumbnail: `${HENAOJARA_BASE}/cdn/img/episodios/${data.data.internalID}-${ep.number}.webp?t=0.1`,//`${HENAOJARA_BASE}/cdn/img/episodios/3988-${ep.number}.webp?t=0.1`,
         released: new Date(d.setDate(d.getDate() - (epCount - ep.number))),
         available: true
       }
     })
     if (data.data.next_airing_episode !== undefined) {
       videos.push({
-        id: `animeav1:${slug}:${epCount + 1}`,
+        id: `henaojara:${slug}:${epCount + 1}`,
         title: `${data.data.title} Ep. ${epCount + 1}`,
         season: 1,
         episode: epCount + 1,
         number: epCount + 1,
-        thumbnail: "https://www3.animeflv.net/assets/animeflv/img/cnt/proximo.png",
+        thumbnail: "https://i.imgur.com/3U6r1nF.jpg",
         released: new Date(data.data.next_airing_episode),
         available: false //next episode is not available yet
       })
@@ -107,23 +102,20 @@ exports.GetAnimeBySlug = async function (slug) {
     }
     return {
       name: data.data.title, alternative_titles: data.data.alternative_titles, type: (data.data.type === "Pelicula" || data.data.type === "Película" || data.data.type === "Especial") ? "movie" : "series",
-      videos, poster: data.data.cover, background: `https://cdn.animeav1.com/thumbnails/${matches[1]}.jpg`, genres: data.data.genres, description: data.data.synopsis.replaceAll(/\\n/g,'\n').replaceAll(/\\"/g,'"'), website: data.data.url, id: `animeav1:${slug}`,
+      videos, poster: data.data.cover, background: `${HENAOJARA_BASE}/cdn/img/portada/${data.data.slug}.webp?t=0.1`, genres: data.data.genres, description: data.data.synopsis.replaceAll(/\\n/g,'\n').replaceAll(/\\"/g,'"'), website: data.data.url, id: `henaojara:${slug}`,
       language: "jpn", ...(data.data.related) && {
         links: data.data.related.map((r) => {
-          return { name: r.title, category: r.relation, url: `stremio:///detail/series/animeav1:${r.slug}` }
+          return { name: r.title, category: r.relation, url: `stremio:///detail/series/henaojara:${r.slug}` }
         })
       },
-      runtime: data.data.runtime,
-      ...(data.data.startDate) && { released: data.data.startDate, releaseInfo: data.data.startDate.getFullYear() + "-".concat((data.data.endDate!==undefined)?data.data.endDate?.getFullYear():"") },
-      ...(data.data.trailers) && { trailers: [ {source: data.data.trailers, type: "Trailer"} ] },
       ...(data.data.next_airing_episode !== undefined) && { behaviorHints: { hasScheduledVideos: true } },
-      ...(videos.length == 1) && { behaviorHints: { defaultVideoId: `animeav1:${slug}:1` } }
+      ...(videos.length == 1) && { behaviorHints: { defaultVideoId: `henaojara:${slug}:1` } }
     }
   })
 }
 //WIP
 exports.GetItemStreams = async function (slug, epNumber = 1) {
-  //if we don't get an episode number, use 1, that's how animeAV1 works
+  //if we don't get an episode number, use 1, that's how henaojara works
   return GetEpisodeLinks(slug, epNumber).then((data) => {
     if (!data) throw Error('Empty response!')
     return { data }
@@ -133,10 +125,10 @@ exports.GetItemStreams = async function (slug, epNumber = 1) {
     const externalStreams = data.data.servers.filter((src) => src.embed !== undefined).map((source) => {
       return {
         externalUrl: source.embed,
-        name: "AnimeAV1\n" + source.name + "⇗\n(external)" + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
+        name: "Henaojara\n" + source.name + "⇗\n(external)" + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
         title: epName + "\n⚙️ (opens " + source.name + " in your browser)\n🔗 " + source.embed + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
         behaviorHints: {
-          bingeGroup: "animeAV1|" + source.name + "|ext",
+          bingeGroup: "henaojara|" + source.name + "|ext",
           filename: source.embed
         }
       }
@@ -148,10 +140,10 @@ exports.GetItemStreams = async function (slug, epNumber = 1) {
         return streamParser.GetYourUploadLink(source.embed).then((realURL) => {
           return {
             url: realURL,
-            name: "AnimeAV1\n" + source.name + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
+            name: "Henaojara\n" + source.name + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
             title: epName + "\n⚙️ " + source.name + "\n🔗 " + realURL + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
             behaviorHints: {
-              bingeGroup: "animeAV1|" + source.name,
+              bingeGroup: "henaojara|" + source.name,
               filename: realURL,
               notWebReady: true,
               proxyHeaders: {
@@ -173,10 +165,10 @@ exports.GetItemStreams = async function (slug, epNumber = 1) {
         return streamParser.GetMP4UploadLink(source.embed).then((realURL) => {
           return {
             url: realURL,
-            name: "AnimeAV1\n" + source.name + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
+            name: "Henaojara\n" + source.name + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
             title: epName + "\n⚙️ " + source.name + "\n🔗 " + realURL + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
             behaviorHints: {
-              bingeGroup: "animeAV1|" + source.name,
+              bingeGroup: "henaojara|" + source.name,
               filename: realURL,
               notWebReady: true,
               proxyHeaders: {
@@ -198,10 +190,10 @@ exports.GetItemStreams = async function (slug, epNumber = 1) {
         return streamParser.GetPDrainLink(source.embed).then((realURL) => {
           return {
             url: realURL,
-            name: "AnimeAV1\n" + source.name + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
+            name: "Henaojara\n" + source.name + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
             title: epName + "\n⚙️ " + source.name + "\n🔗 " + realURL + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
             behaviorHints: {
-              bingeGroup: "animeAV1|" + source.name,
+              bingeGroup: "henaojara|" + source.name,
               filename: realURL,
               notWebReady: true,
               proxyHeaders: {
@@ -224,10 +216,10 @@ exports.GetItemStreams = async function (slug, epNumber = 1) {
         return streamParser.GetHLSLink(source.embed).then((realURL) => {
           return {
             url: realURL,
-            name: "AnimeAV1\n" + source.name + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
+            name: "Henaojara\n" + source.name + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
             title: epName + "\n⚙️ " + source.name + "\n🔗 " + realURL + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
             behaviorHints: {
-              bingeGroup: "animeAV1|" + source.name,
+              bingeGroup: "henaojara|" + source.name,
               filename: realURL,
               notWebReady: true,
               proxyHeaders: {
@@ -259,13 +251,13 @@ async function GetEpisodeLinks(slug, epNumber = 1) {
   try {
     const episodeData = async () => {
       if (slug && !epNumber)
-        return await fetch(ANIMEAV1_BASE + "/media/" + slug).then((resp) => {
+        return await fetch(HENAOJARA_BASE + "/ver/" + slug).then((resp) => {
           if ((!resp.ok) || resp.status !== 200) throw Error(`HTTP error! Status: ${resp.status}`)
           if (resp === undefined) throw Error(`Undefined response!`)
           return resp.text()
         }).catch(() => null);
       else if (slug && epNumber)
-        return await fetch(ANIMEAV1_BASE + "/media/" + slug + "/" + epNumber).then((resp) => {
+        return await fetch(HENAOJARA_BASE + "/ver/" + slug + "-" + epNumber).then((resp) => {
           if ((!resp.ok) || resp.status !== 200) throw Error(`HTTP error! Status: ${resp.status}`)
           if (resp === undefined) throw Error(`Undefined response!`)
           return resp.text()
@@ -278,75 +270,73 @@ async function GetEpisodeLinks(slug, epNumber = 1) {
     const $ = cheerio.load(await episodeData());
 
     const episodeLinks = {
-      title: $("body > div > div.container > main > article > div > div > header > div > div > a").text(),
-      number: (["Película", "Especial"].includes($("body > div > div.container > main > article > div > div > header > div.flex > span").first().text().trim())) ? undefined : Number($("body > div > div.container > main > article > div > div > header > div.flex + h1").text().replace("Episodio ", "")) || epNumber,
+      title: $("#l > div > h1").text(),
       servers: []
     }
 
-    const scripts = $("script");
-    const metadataJSON = scripts.map((_, el) => $(el).html()).get().find(script => script?.includes("kit.start(app, element, {"));
+    const serversDIV = $("div.dwn");
     
-    const serversObj = metadataJSON?.match(/embeds:\s?.*?SUB:\s?(\[.*?\])/)?.[1];
-    const downloadObj = metadataJSON?.match(/downloads:\s?.*?SUB:\s?(\[.*?\])/)?.[1];
-    const serversObjDUB = metadataJSON?.match(/embeds:\s?.*?DUB:\s?(\[.*?\])/)?.[1];
-    const downloadObjDUB = metadataJSON?.match(/downloads:\s?.*?DUB:\s?(\[.*?\])/)?.[1];
-    let servers = [];
-    if (serversObj) {
-      servers = serversObj.split("},")?.map(s => {
-        return {
-          title: s.match(/server:\s?"(.*?)"/)?.[1],
-          code: s.match(/url:\s?"(.*?)"/)?.[1]
-        }
+    const downloadObj = JSON.parse(serversDIV.attr("data-dwn") || "null");
+
+    const getServerTitle = (serverDomain) => {
+      const cleanDom = serverDomain.replace("bysesukior", "Filemoon").replace("movearnpre", "Vidhide")
+        .replace("luluvdo", "Lulustream").replace("dhcplay", "Streamwish").replace("listeamed", "Vidguard")
+        .replace("rpmvip", "RPMshare").replace("yourupload", "YourUpload").replace("mp4upload", "MP4Upload")
+        .replace("pdrain", "PDrain").replace("hls", "HLS")
+        .replace(".com", "").replace(".net", "").replace(".org", "").replace(".top", "")
+        .replace(".to", "").replace(".ac", "").replace(".sx", "").replace(".ps", "");
+      return cleanDom.charAt(0).toUpperCase() + cleanDom.slice(1)
+    }
+    const hex2a = (hex) => { var str = ''; for (var i = 0; i < hex.length; i += 2) str += String.fromCharCode(parseInt(hex.substr(i, 2), 16)); return str;};
+    const serverData = async () => {
+      return await fetch(`${HENAOJARA_BASE}/hj`, {
+        "headers": {
+          "accept": "*/*",
+          "accept-language": "en,en-US;q=0.9,es-ES;q=0.8,es;q=0.7,fr;q=0.6,no;q=0.5",
+          "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "priority": "u=1, i",
+          "sec-ch-ua": "\"Opera GX\";v=\"125\", \"Not?A_Brand\";v=\"8\", \"Chromium\";v=\"141\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"Windows\"",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "x-requested-with": "XMLHttpRequest",
+          "Referer": `${HENAOJARA_BASE}/ver/${slug}-${epNumber}`,
+        },
+        "body": `acc=opt&i=${$(".opt").attr("data-encrypt")}`,
+        "method": "POST"
+      }).then((resp) => {
+        if ((!resp.ok) || resp.status !== 200) throw Error(`HTTP error! Status: ${resp.status}`)
+        if (resp === undefined) throw Error(`Undefined response!`)
+        return resp.text()
+      }).catch(() => {console.log("Failed to fetch server data"); return null});
+    }
+    const $2 = cheerio.load(await serverData());
+    
+    if ($2) {
+      const lis = $2("li");
+      lis.each((_, el) => {
+        const s = hex2a($(el).attr("encrypt"));
+        const sURL = new URL(s)
+        episodeLinks.servers.push({
+          name: getServerTitle(sURL.hostname),
+          embed: s?.replace("mega.nz/embed#!", "mega.nz/embed/"),
+          dub: false
+        });
       });
     }
     if (downloadObj) {
-      servers = servers.concat(downloadObj.split("},")?.map(s => {
-        return {
-          title: s.match(/server:\s?"(.*?)"/)?.[1],
-          url: s.match(/url:\s?"(.*?)"/)?.[1]
-        }
-      }));
-    }
-    if (serversObjDUB) {
-      servers = servers.concat(serversObjDUB.split("},")?.map(s => {
-        return {
-          title: s.match(/server:\s?"(.*?)"/)?.[1],
-          code: s.match(/url:\s?"(.*?)"/)?.[1],
-          dub: true
-        }
-      }));
-    }
-    if (downloadObjDUB) {
-      servers = servers.concat(downloadObjDUB.split("},")?.map(s => {
-        return {
-          title: s.match(/server:\s?"(.*?)"/)?.[1],
-          url: s.match(/url:\s?"(.*?)"/)?.[1],
-          dub: true
-        }
-      }));
-    }
-
-    for (const s of servers) {
-      episodeLinks.servers.push({
-        name: s?.title,
-        download: s?.url?.replace("mega.nz/#!", "mega.nz/file/"),
-        embed: s?.code?.replace("mega.nz/embed#!", "mega.nz/embed/"),
-        dub: s?.dub || false
-      });
-    }
-    /*
-    const otherDownloads = $("body > div.Wrapper > div.Body > div > div > div > div > div > table > tbody > tr");
-
-    for (const el of otherDownloads) {
-      const name = $(el).find("td").eq(0).text();
-      const lookFor = ["Zippyshare", "1Fichier"];
-      if (lookFor.includes(name)) {
+      for (const s of downloadObj) {
+        const sURL = new URL(s)
         episodeLinks.servers.push({
-          name: $(el).find("td").eq(0).text(),
-          download: $(el).find("td:last-child a").attr("href")
+          name: getServerTitle(sURL.hostname),
+          download: s?.replace("mega.nz/#!", "mega.nz/file/"),
+          dub: false
         });
       }
-    }*/
+    }
+
     return episodeLinks;
   } catch (e) {
     console.error("Error on GetEpisodeLinks:", e);
@@ -356,7 +346,7 @@ async function GetEpisodeLinks(slug, epNumber = 1) {
 
 async function GetAnimeInfo(slug) {
   try {
-    const url = `${ANIMEAV1_BASE}/media/${slug}`;
+    const url = `${HENAOJARA_BASE}/anime/${slug}`;
     const html = await fetch(url).then((resp) => {
       if ((!resp.ok) || resp.status !== 200) throw Error(`HTTP error! Status: ${resp.status}`)
       if (resp === undefined) throw Error(`Undefined response!`)
@@ -370,84 +360,60 @@ async function GetAnimeInfo(slug) {
     // const nextAiringFind = scripts.map((_, el) => $(el).html()).get().find(script => script?.includes("var anime_info ="));
     // const nextAiringInfo = nextAiringFind?.match(/anime_info = (\[.*\])/)?.[1];
 
-    const metadataJSON = scripts.map((_, el) => $(el).html()).get().find(script => script?.includes("kit.start(app, element, {"));
-    const metadataObj = metadataJSON?.match(/data:(.+\]),/)?.[1];
-
     const animeInfo = {
-      title: metadataObj?.match(/title:\s?"(.+?)",/)?.[1] || $("body main > article > div > div > header > div > h1").text(),
-      alternative_titles: [],
-      status: metadataObj?.match(/title:\s?"(.*?)",/)?.[1] || $("body main > article > div > div > header > div > span:last-child").text(),
-      rating: metadataObj?.match(/score:\s?(\d{0,2}\.\d{0,2}),/)?.[1] || $("div.ic-star-solid > div.text-lead").text(),
-      type: metadataObj?.match(/category:\s?.+?name:"(.*?)",/)?.[1] || $("body main > article > div > div > header > div > span:first-child").text(),
-      cover: $("body main > article > div > div > figure > img").attr("src"),
-      synopsis: metadataObj?.match(/synopsis:\s?"(.*?)",/)?.[1] ||$("body main > article > div > div > div.entry > p").text(),
-      genres: metadataObj?.match(/genres:\s?(.*?)],/)?.[1]?.matchAll(/name:\s?"(.+?)"/g).toArray().map((el)=>el[1].trim()) || $("body main > article > div > div > header > div > a")
-        .map((_, el) => $(el).text().trim())
-        .get(),
+      title: $("#l > div.info > div.info-b > h1").text() || $("#l > div.info > div.info-a > figure > img").attr("alt"),
+      alternative_titles: $("#l > div.info > div.info-b > h3").text().split(",") || [],
+      status: $("#l > div.info > div.info-b > span.e").text(),
+      //rating: $("div.ic-star-solid > div.text-lead").text(),
+      type: $("#l > div.info > div.info-b > ul.dt > li:first-child").text().replace("Tipo: ", ""),
+      cover: $("#l > div.info > div.info-a > figure > img").attr("data-src") || `${HENAOJARA_BASE}/cdn/img/anime/${slug}.webp`,
+      synopsis: $("#l > div.info > div.info-b > div.tx > p").text(),
+      genres: $("#l > div.info > div.info-b > ul.gn > li").map((_, el) => $(el).find("a").text().trim()).get(),
       //next_airing_episode: nextAiringInfo ? JSON.parse(nextAiringInfo)?.[3] : undefined,
       episodes: [],
-      url,
-      ...(metadataObj?.match(/runtime:\s?(.*?),/)?.[1] !== "null") && { runtime: `${metadataObj?.match(/runtime:\s?(.*?),/)?.[1]}m` || undefined },
-      ...(metadataObj?.match(/trailer:\s?"(.*?)",/)?.[1]) && { trailers: metadataObj?.match(/trailer:\s?"(.*?)",/)?.[1] || undefined }
+      internalID: html.match(/data-ai="(\d+)"/)?.[1],
+      url
     };
     
-    if (metadataObj?.includes("episodesCount")){
-      const episodesCount = Number(metadataObj?.match(/episodesCount:\s?(\d+),/)?.[1]);
-      for (let i = 1; i <= episodesCount; i++) {
+    const episodesFind = scripts.map((_, el) => $(el).html()).get().find(script => script?.includes("var eps ="));
+    const episodesArray = episodesFind?.match(/eps = (\[\[.*\].*])/)?.[1];
+
+    const epObj = JSON.parse(episodesArray)
+    if (epObj) {
+      for (ep of epObj) {
         if (animeInfo.episodes instanceof Array) {
           animeInfo.episodes.push({
-            number: i,
-            slug: slug + "-" + i,
-            url: ANIMEAV1_BASE + "/media/" + slug + "/" + i
+            number: ep[0],
+            slug: slug + "-" + ep[0],
+            url: HENAOJARA_BASE + "/ver/" + slug + "-" + ep[0]
           });
         }
       }
     }
-    // Alternative titles
-    if (metadataObj?.includes("aka:")){
-      try {
-        const alt_titls = JSON.parse(metadataObj?.match(/aka:\s?({.+?}),/)?.[1]);
-        for (const value of Object.values(alt_titls)) {
-          animeInfo.alternative_titles.push(value);
-        }
-      } catch (error) {}
-    } else {
-      $("body main > article > div > div > header > div > h2").each((_, el) => {
-        animeInfo.alternative_titles.push($(el).text());
-      });
-    }
 
     // Relacionados
-    const relatedEls = $("body > div > div.container > main > section:nth-child(2) > div > div.gradient-cut > div > div");
-    const relatedAnimes = [];
-    relatedEls.each((_, el) => {
-      const link = $(el).find("a");
-      const href = link.attr("href");
-      const title = $(el).find("h3").text().trim();
-      const relation = $(el).find("h3 + span").text().trim();
-      if (href && title) {
-        const slug = href.match(/\/media\/([^/]+)/)?.[1] || href;
-        relatedAnimes.push({
-          title,
-          relation,
-          slug,
-          url: `${ANIMEAV1_BASE}${href}`
-        });
-      }
-    });
+    // const relatedEls = $("body > div > div.container > main > section:nth-child(2) > div > div.gradient-cut > div > div");
+    // const relatedAnimes = [];
+    // relatedEls.each((_, el) => {
+    //   const link = $(el).find("a");
+    //   const href = link.attr("href");
+    //   const title = $(el).find("h3").text().trim();
+    //   const relation = $(el).find("h3 + span").text().trim();
+    //   if (href && title) {
+    //     const slug = href.match(/\/media\/([^/]+)/)?.[1] || href;
+    //     relatedAnimes.push({
+    //       title,
+    //       relation,
+    //       slug,
+    //       url: `${ANIMEAV1_BASE}${href}`
+    //     });
+    //   }
+    // });
 
     // Asigna la propiedad si hay elementos
-    if (relatedAnimes.length > 0) {
-      animeInfo.related = relatedAnimes;
-    }
-
-    // Dates
-    if (metadataObj?.includes("startDate:")){
-      const startDate = Date.parse(metadataObj?.match(/startDate:\s?"(.*?)",/)?.[1]);
-      const endDate = Date.parse(metadataObj?.match(/endDate:\s?"(.*?)",/)?.[1]);
-      if (!isNaN(startDate)) animeInfo.startDate = new Date(startDate);
-      if (!isNaN(endDate)) animeInfo.endDate = new Date(endDate);
-    }
+    // if (relatedAnimes.length > 0) {
+    //   animeInfo.related = relatedAnimes;
+    // }
 
     return animeInfo;
   } catch (error) {
@@ -456,9 +422,9 @@ async function GetAnimeInfo(slug) {
   }
 }
 //Adapted from TypeScript from https://github.com/ahmedrangel/animeflv-api/blob/main/server/utils/scrapers/getEpisodeLinks.ts
-async function SearchAnimesBySpecificURL(animeAV1URL) {
+async function SearchAnimesBySpecificURL(henaojaraURL) {
   try {
-    const html = await fetch(decodeURIComponent(animeAV1URL)).then((resp) => {
+    const html = await fetch(decodeURIComponent(henaojaraURL)).then((resp) => {
       if ((!resp.ok) || resp.status !== 200) throw Error(`HTTP error! Status: ${resp.status}`)
       if (resp === undefined) throw Error(`Undefined response!`)
       return resp.text()
@@ -474,10 +440,12 @@ async function SearchAnimesBySpecificURL(animeAV1URL) {
       media: []
     };
 
-    const pageSelector = $("body > div > div.container > main > section > div > a");
+    const pageSelector = $("#m > section > ul.pag > li");
     const getNextAndPrevPages = (selector) => {
-      const aTagValue = selector.last().prev().find("a").text();
-      const aRef = selector.eq(0).children("a").attr("href");
+      let aTagValue = selector.last().prev().find("a").text();
+      if (aTagValue.includes("Siguiente")) aTagValue = selector.last().prev().prev().find("a").text();
+      let aRef = selector.eq(0).children("a");
+      if (aRef.text().includes("Inicio")) aRef = selector.eq(1).children("a");
 
       let foundPages = 0;
       let previousPage = "";
@@ -486,30 +454,30 @@ async function SearchAnimesBySpecificURL(animeAV1URL) {
       if (Number(aTagValue) === 0) foundPages = 1;
       else foundPages = Number(aTagValue);
 
-      if (aRef === "#" || foundPages == 1) previousPage = null;
-      else previousPage = ANIMEAV1_BASE + aRef;
+      if (aRef.text() === "1" || foundPages == 1) previousPage = null;
+      else previousPage = HENAOJARA_BASE + aRef.attr("href");
 
-      if (selector.last().children("a").attr("href") === "#" || foundPages == 1) nextPage = null;
-      else nextPage = ANIMEAV1_BASE + selector.last().children("a").attr("href");
+      if (!selector.last().children("a").text().includes("Último") || foundPages == 1) nextPage = null;
+      else nextPage = HENAOJARA_BASE + selector.last().prev().find("a").attr("href");
 
       return { foundPages, nextPage, previousPage };
     }
     const { foundPages, nextPage, previousPage } = getNextAndPrevPages(pageSelector)
     const scrapSearchAnimeData = ($) => {
-      const selectedElement = $("body > div > div.container > main > section > div > article");
+      const selectedElement = $("#m > section > div > article");
 
       if (selectedElement.length > 0) {
         const mediaVec = [];
 
         selectedElement.each((_, el) => {
           mediaVec.push({
-            title: $(el).find("header > h3").text(),
-            cover: $(el).find("div > figure > img").attr("src"),
-            synopsis: $(el).find("div > div > div > p").eq(1).text(),
+            title: $(el).find("h3").text() || $(el).find("figure > a > img").attr("alt"),
+            cover: $(el).find("figure > a > img").attr("data-src"),
+            //synopsis: $(el).find("div > div > div > p").eq(1).text(),
             //rating: $(el).find("article > div > p:nth-child(2) > span.Vts.fa-star").text(),
-            slug: $(el).find("a").attr("href").replace("/media/", ""),
-            type: $(el).find("div > figure + div > div").text(),
-            url: ANIMEAV1_BASE + ($(el).find("a").attr("href"))
+            slug: $(el).find("a").attr("href").replace("./anime/", ""),
+            type: $(el).find("figure > a > b").text(),
+            url: HENAOJARA_BASE + ($(el).find("a").attr("href").replace('.', '') || $(el).find("h3 > a").attr("href").replace('.', '')),
           });
         });
         return mediaVec
@@ -537,7 +505,7 @@ async function SearchAnimesBySpecificURL(animeAV1URL) {
 }
 
 async function GetOnAir() {
-  return SearchAnimesBySpecificURL("https://animeav1.com/catalogo?status=emision").then((data) => {
+  return SearchAnimesBySpecificURL(`${decodeURIComponent(HENAOJARA_BASE)}/animes?estado=en-emision`).then((data) => {
     if (!data || data.media === undefined) throw Error("Invalid response!")
     return data.media.map((anime) => {
       return {
