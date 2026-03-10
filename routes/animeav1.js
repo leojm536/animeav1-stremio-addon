@@ -3,8 +3,7 @@ const ANIMEAV1_BASE = "https://animeav1.com"
 const fsPromises = require("fs/promises");
 const cheerio = require("cheerio");
 const streamParser = require("../lib/streamParsing.js");
-//const vercelBlob = require("@vercel/blob");
-require('dotenv').config()//process.env.var
+require('dotenv').config()
 
 exports.GetAiringAnimeFromWeb = async function () {
   return GetOnAir().then((data) => {
@@ -20,7 +19,6 @@ exports.GetAiringAnimeFromWeb = async function () {
         }
       })
     })
-
     return Promise.allSettled(promises).then((results) =>
       results.filter((prom) => (prom.value)).map((source) => source.value)
     )
@@ -30,7 +28,7 @@ exports.GetAiringAnimeFromWeb = async function () {
 exports.GetAiringAnime = async function () {
   return fsPromises.readFile('./onairAV1_titles.json').then((data) => JSON.parse(data)).catch((err) => {
     console.error('\x1b[31mFailed reading titles cache:\x1b[39m ' + err)
-    return this.GetAiringAnimeFromWeb() //If the file doesn't exist, get the titles from the web
+    return this.GetAiringAnimeFromWeb()
   })
 }
 
@@ -38,9 +36,9 @@ exports.UpdateAiringAnimeFile = function () {
   return this.GetAiringAnimeFromWeb().then((titles) => {
     console.log(`\x1b[36mGot ${titles.length} titles\x1b[39m, saving to cache`)
     return fsPromises.writeFile('./onairAV1_titles.json', JSON.stringify(titles))
-  }).then(() => console.log('\x1b[32mOn Air AV1 titles "cached" successfully!\x1b[39m')
+  }).then(() => console.log('\x1b[32mOn Air AV1 titles cached!\x1b[39m')
   ).catch((err) => {
-    console.error('\x1b[31mFailed "caching" titles:\x1b[39m ' + err)
+    console.error('\x1b[31mFailed caching titles:\x1b[39m ' + err)
   })
 }
 
@@ -49,7 +47,6 @@ exports.SearchAnimeAV1 = async function (query, type = undefined, genreArr = und
   if (type) {
     type = (type === "movie") ? "category%3Dpelicula%26" : "category%3Dtv-anime%26category%3Dova%26category%3Despecial%26"
   }
-//https://animeav1.com/catalogo?search=one-piece&category=tv-anime&genre=accion&page=2
   const animeAV1URL = (url) ? url
     : `${encodeURIComponent(ANIMEAV1_BASE)}%2Fcatalogo%3F${(query) ? "search%3D" + encodeURIComponent(query) + "%26" : ""}${(type) ? type : ""}${(genreArr) ? "genre%3D" + genreArr.join("%26genre%3D") : ""}${(page) ? "%26page%3D" + page : ""}`
   return SearchAnimesBySpecificURL(animeAV1URL).then((data) => {
@@ -73,7 +70,6 @@ exports.GetAnimeBySlug = async function (slug) {
     return { data }
   }).then((data) => {
     if (data?.data === undefined) throw Error("Invalid response!")
-    //return first result
     const epCount = data.data.episodes.length
     const imgPattern = /\/(\d+).jpg$/g
     const matches = imgPattern.exec(data.data.cover)
@@ -85,7 +81,7 @@ exports.GetAnimeBySlug = async function (slug) {
         season: 1,
         episode: ep.number,
         number: ep.number,
-        thumbnail: `https://cdn.animeav1.com/screenshots/${matches[1]}/${ep.number}.jpg`,//`https://cdn.animeflv.net/screenshots/${matches[1]}/${ep.number}/th_3.jpg`,
+        thumbnail: `https://cdn.animeav1.com/screenshots/${matches[1]}/${ep.number}.jpg`,
         released: new Date(d.setDate(d.getDate() - (epCount - ep.number))),
         available: true
       }
@@ -99,10 +95,10 @@ exports.GetAnimeBySlug = async function (slug) {
         number: epCount + 1,
         thumbnail: "https://www3.animeflv.net/assets/animeflv/img/cnt/proximo.png",
         released: new Date(data.data.next_airing_episode),
-        available: false //next episode is not available yet
+        available: false
       })
     }
-    if (videos.length === 1 && epCount === 1) { //If only one ep. probably a movie, remove the "Ep. 1" from the title
+    if (videos.length === 1 && epCount === 1) {
       videos[0].title = videos[0].title.replace(" Ep. 1", "")
     }
     return {
@@ -121,136 +117,91 @@ exports.GetAnimeBySlug = async function (slug) {
     }
   })
 }
-//WIP
+
 exports.GetItemStreams = async function (slug, epNumber = 1) {
-  //if we don't get an episode number, use 1, that's how animeAV1 works
   return GetEpisodeLinks(slug, epNumber).then((data) => {
     if (!data) throw Error('Empty response!')
     return { data }
   }).then((data) => {
     if (data?.data?.servers === undefined) throw Error("Invalid response!")
     let epName = (data.data.number) ? data.data.title + " Ep. " + data.data.number : data.data.title
-    const externalStreams = data.data.servers.filter((src) => src.embed !== undefined).map((source) => {
-      return {
-        externalUrl: source.embed,
-        name: "AnimeAV1\n" + source.name + "⇗\n(external)" + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
-        title: epName + "\n⚙️ (opens " + source.name + " in your browser)\n🔗 " + source.embed + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
-        behaviorHints: {
-          bingeGroup: "animeAV1|" + source.name + "|ext",
-          filename: source.embed
-        }
-      }
-    })
-    //return externalStreams WIP
-    const downloadStreams = data.data.servers.filter((src) => /*(src.download !== undefined && src.name === "Stape") ||*/ (src.embed !== undefined && ["YourUpload", "MP4Upload"/*, "HLS", "PDrain"*/].includes(src.name)))
+
+    // ── Streams directos (reproducen dentro de Stremio) ──────────────
+    // HLS y PDrain activados ✅
+    const downloadStreams = data.data.servers.filter((src) =>
+      src.embed !== undefined && ["MP4Upload", "PDrain"].includes(src.name)
+    )
+
     const promises = downloadStreams.map((source) => {
       if (source.name === "YourUpload") {
-        return streamParser.GetYourUploadLink(source.embed).then((realURL) => {
-          return {
-            url: realURL,
-            name: "AnimeAV1\n" + source.name + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
-            title: epName + "\n⚙️ " + source.name + "\n🔗 " + realURL + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
-            behaviorHints: {
-              bingeGroup: "animeAV1|" + source.name,
-              filename: realURL,
-              notWebReady: true,
-              proxyHeaders: {
-                request: {
-                  "Referer": "https://yourupload.com",
-                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-                },
-                response: {
-                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-                }
-              }
+        return streamParser.GetYourUploadLink(source.embed).then((realURL) => ({
+          url: realURL,
+          name: "AnimeAV1\n" + source.name + (source.dub ? "\n🗣️(DUB)" : ""),
+          title: epName + "\n⚙️ " + source.name + (source.dub ? "\n🗣️(DUB)" : ""),
+          behaviorHints: {
+            bingeGroup: "animeAV1|" + source.name,
+            filename: realURL, notWebReady: true,
+            proxyHeaders: {
+              request: { "Referer": "https://yourupload.com", "User-Agent": "Mozilla/5.0" },
+              response: { "User-Agent": "Mozilla/5.0" }
             }
           }
-        }).catch((err) => {
-          console.error("Failed getting YourUpload link:", err)
-          return undefined
-        })
+        })).catch((err) => { console.error("YourUpload failed:", err); return undefined })
+
       } else if (source.name === "MP4Upload") {
-        return streamParser.GetMP4UploadLink(source.embed).then((realURL) => {
-          return {
-            url: realURL,
-            name: "AnimeAV1\n" + source.name + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
-            title: epName + "\n⚙️ " + source.name + "\n🔗 " + realURL + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
-            behaviorHints: {
-              bingeGroup: "animeAV1|" + source.name,
-              filename: realURL,
-              notWebReady: true,
-              proxyHeaders: {
-                request: {
-                  "Referer": "https://a4.mp4upload.com",
-                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-                },
-                response: {
-                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-                }
+        return streamParser.GetMP4UploadLink(source.embed).then((realURL) => ({
+          url: realURL,
+          name: "AnimeAV1\n" + source.name + (source.dub ? "\n🗣️(DUB)" : ""),
+          title: epName + "\n⚙️ " + source.name + (source.dub ? "\n🗣️(DUB)" : ""),
+          behaviorHints: {
+            bingeGroup: "animeAV1|" + source.name,
+            filename: realURL, notWebReady: true,
+            proxyHeaders: {
+              request: { "Referer": "https://a4.mp4upload.com", "User-Agent": "Mozilla/5.0" },
+              response: { "User-Agent": "Mozilla/5.0" }
+            }
+          }
+        })).catch((err) => { console.error("MP4Upload failed:", err); return undefined })
+
+      } else if (source.name === "PDrain") {
+        return streamParser.GetPDrainLink(source.embed).then((realURL) => ({
+          url: realURL,
+          name: "AnimeAV1\n" + source.name + (source.dub ? "\n🗣️(DUB)" : ""),
+          title: epName + "\n⚙️ PDrain" + (source.dub ? "\n🗣️(DUB)" : ""),
+          behaviorHints: {
+            bingeGroup: "animeAV1|" + source.name,
+            filename: realURL, notWebReady: true,
+            proxyHeaders: {
+              request: { "Referer": "https://pixeldrain.com", "User-Agent": "Mozilla/5.0" },
+              response: { "User-Agent": "Mozilla/5.0", "Content-Type": "video/mp4" }
+            }
+          }
+        })).catch((err) => { console.error("PDrain failed:", err); return undefined })
+
+      } else if (source.name === "HLS") {
+        // ✅ HLS de Zilla Networks — stream directo dentro de Stremio
+        return streamParser.GetHLSLink(source.embed).then((realURL) => ({
+          url: realURL,
+          name: "AnimeAV1\n" + source.name + (source.dub ? "\n🗣️(DUB)" : ""),
+          title: epName + "\n⚙️ HLS (Zilla)" + (source.dub ? "\n🗣️(DUB)" : ""),
+          behaviorHints: {
+            bingeGroup: "animeAV1|" + source.name,
+            filename: realURL, notWebReady: true,
+            proxyHeaders: {
+              request: { "Referer": "https://player.zilla-networks.com", "User-Agent": "Mozilla/5.0" },
+              response: {
+                "User-Agent": "Mozilla/5.0",
+                "Content-Type": realURL.includes("/m3u8/") ? "application/vnd.apple.mpegurl" : "video/mp4"
               }
             }
           }
-        }).catch((err) => {
-          console.error("Failed getting MP4Upload link:", err)
-          return undefined
-        })
-      } else if(source.name === "PDrain") {
-        return streamParser.GetPDrainLink(source.embed).then((realURL) => {
-          return {
-            url: realURL,
-            name: "AnimeAV1\n" + source.name + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
-            title: epName + "\n⚙️ " + source.name + "\n🔗 " + realURL + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
-            behaviorHints: {
-              bingeGroup: "animeAV1|" + source.name,
-              filename: realURL,
-              notWebReady: true,
-              proxyHeaders: {
-                request: {
-                  "Referer": "https://pixeldrain.com",
-                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-                },
-                response: {
-                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
-                  "Content-Type": "video/mp4"
-                }
-              }
-            }
-          }
-        }).catch((err) => {
-          console.error("Failed getting PDrain link:", err)
-          return undefined
-        })
-      } else if(source.name === "HLS") {
-        return streamParser.GetHLSLink(source.embed).then((realURL) => {
-          return {
-            url: realURL,
-            name: "AnimeAV1\n" + source.name + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
-            title: epName + "\n⚙️ " + source.name + "\n🔗 " + realURL + ((source.dub) ? "\n🗣️🎙️(DUB)" : ""),
-            behaviorHints: {
-              bingeGroup: "animeAV1|" + source.name,
-              filename: realURL,
-              notWebReady: true,
-              proxyHeaders: {
-                request: {
-                  "Referer": "https://player.zilla-networks.com",
-                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-                },
-                response: {
-                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
-                  "Content-Type": (realURL.includes("/m3u8/")) ? "application/vnd.apple.mpegurl" : "video/mp4"
-                }
-              }
-            }
-          }
-        }).catch((err) => {
-          console.error("Failed getting HLS link:", err)
-          return undefined
-        })
+        })).catch((err) => { console.error("HLS failed:", err); return undefined })
       }
     })
 
     return Promise.allSettled(promises).then((results) =>
-      results.filter((prom) => (prom.value)).map((source) => source.value).concat(externalStreams)
+      results.filter((p) => p.value).map((p) => p.value)
+      // Nota: ya no incluimos externalStreams — solo streams directos
     )
   })
 }
@@ -261,21 +212,20 @@ async function GetEpisodeLinks(slug, epNumber = 1) {
       if (slug && !epNumber)
         return await fetch(ANIMEAV1_BASE + "/media/" + slug).then((resp) => {
           if ((!resp.ok) || resp.status !== 200) throw Error(`HTTP error! Status: ${resp.status}`)
-          if (resp === undefined) throw Error(`Undefined response!`)
           return resp.text()
         }).catch(() => null);
       else if (slug && epNumber)
         return await fetch(ANIMEAV1_BASE + "/media/" + slug + "/" + epNumber).then((resp) => {
           if ((!resp.ok) || resp.status !== 200) throw Error(`HTTP error! Status: ${resp.status}`)
-          if (resp === undefined) throw Error(`Undefined response!`)
           return resp.text()
         }).catch(() => null);
       else return null;
     }
 
-    if (!(await episodeData())) return null;
+    const html = await episodeData();
+    if (!html) return null;
 
-    const $ = cheerio.load(await episodeData());
+    const $ = cheerio.load(html);
 
     const episodeLinks = {
       title: $("body > div > div.container > main > article > div > div > header > div > div > a").text(),
@@ -285,45 +235,38 @@ async function GetEpisodeLinks(slug, epNumber = 1) {
 
     const scripts = $("script");
     const metadataJSON = scripts.map((_, el) => $(el).html()).get().find(script => script?.includes("kit.start(app, element, {"));
-    
+
     const serversObj = metadataJSON?.match(/embeds:\s?.*?SUB:\s?(\[.*?\])/)?.[1];
     const downloadObj = metadataJSON?.match(/downloads:\s?.*?SUB:\s?(\[.*?\])/)?.[1];
     const serversObjDUB = metadataJSON?.match(/embeds:\s?.*?DUB:\s?(\[.*?\])/)?.[1];
     const downloadObjDUB = metadataJSON?.match(/downloads:\s?.*?DUB:\s?(\[.*?\])/)?.[1];
+
     let servers = [];
     if (serversObj) {
-      servers = serversObj.split("},")?.map(s => {
-        return {
-          title: s.match(/server:\s?"(.*?)"/)?.[1],
-          code: s.match(/url:\s?"(.*?)"/)?.[1]
-        }
-      });
+      servers = serversObj.split("},")?.map(s => ({
+        title: s.match(/server:\s?"(.*?)"/)?.[1],
+        code: s.match(/url:\s?"(.*?)"/)?.[1]
+      }));
     }
     if (downloadObj) {
-      servers = servers.concat(downloadObj.split("},")?.map(s => {
-        return {
-          title: s.match(/server:\s?"(.*?)"/)?.[1],
-          url: s.match(/url:\s?"(.*?)"/)?.[1]
-        }
-      }));
+      servers = servers.concat(downloadObj.split("},")?.map(s => ({
+        title: s.match(/server:\s?"(.*?)"/)?.[1],
+        url: s.match(/url:\s?"(.*?)"/)?.[1]
+      })));
     }
     if (serversObjDUB) {
-      servers = servers.concat(serversObjDUB.split("},")?.map(s => {
-        return {
-          title: s.match(/server:\s?"(.*?)"/)?.[1],
-          code: s.match(/url:\s?"(.*?)"/)?.[1],
-          dub: true
-        }
-      }));
+      servers = servers.concat(serversObjDUB.split("},")?.map(s => ({
+        title: s.match(/server:\s?"(.*?)"/)?.[1],
+        code: s.match(/url:\s?"(.*?)"/)?.[1],
+        dub: true
+      })));
     }
     if (downloadObjDUB) {
-      servers = servers.concat(downloadObjDUB.split("},")?.map(s => {
-        return {
-          title: s.match(/server:\s?"(.*?)"/)?.[1],
-          url: s.match(/url:\s?"(.*?)"/)?.[1],
-          dub: true
-        }
-      }));
+      servers = servers.concat(downloadObjDUB.split("},")?.map(s => ({
+        title: s.match(/server:\s?"(.*?)"/)?.[1],
+        url: s.match(/url:\s?"(.*?)"/)?.[1],
+        dub: true
+      })));
     }
 
     for (const s of servers) {
@@ -334,19 +277,7 @@ async function GetEpisodeLinks(slug, epNumber = 1) {
         dub: s?.dub || false
       });
     }
-    /*
-    const otherDownloads = $("body > div.Wrapper > div.Body > div > div > div > div > div > table > tbody > tr");
 
-    for (const el of otherDownloads) {
-      const name = $(el).find("td").eq(0).text();
-      const lookFor = ["Zippyshare", "1Fichier"];
-      if (lookFor.includes(name)) {
-        episodeLinks.servers.push({
-          name: $(el).find("td").eq(0).text(),
-          download: $(el).find("td:last-child a").attr("href")
-        });
-      }
-    }*/
     return episodeLinks;
   } catch (e) {
     console.error("Error on GetEpisodeLinks:", e);
@@ -359,65 +290,46 @@ async function GetAnimeInfo(slug) {
     const url = `${ANIMEAV1_BASE}/media/${slug}`;
     const html = await fetch(url).then((resp) => {
       if ((!resp.ok) || resp.status !== 200) throw Error(`HTTP error! Status: ${resp.status}`)
-      if (resp === undefined) throw Error(`Undefined response!`)
       return resp.text()
     })
     if (!html) return null;
 
     const $ = cheerio.load(html);
-    //WIP
     const scripts = $("script");
-    // const nextAiringFind = scripts.map((_, el) => $(el).html()).get().find(script => script?.includes("var anime_info ="));
-    // const nextAiringInfo = nextAiringFind?.match(/anime_info = (\[.*\])/)?.[1];
-
     const metadataJSON = scripts.map((_, el) => $(el).html()).get().find(script => script?.includes("kit.start(app, element, {"));
     const metadataObj = metadataJSON?.match(/data:(.+\]),/)?.[1];
 
     const animeInfo = {
       title: metadataObj?.match(/title:\s?"(.+?)",/)?.[1] || $("body main > article > div > div > header > div > h1").text(),
       alternative_titles: [],
-      status: metadataObj?.match(/title:\s?"(.*?)",/)?.[1] || $("body main > article > div > div > header > div > span:last-child").text(),
-      rating: metadataObj?.match(/score:\s?(\d{0,2}\.\d{0,2}),/)?.[1] || $("div.ic-star-solid > div.text-lead").text(),
-      type: metadataObj?.match(/category:\s?.+?name:"(.*?)",/)?.[1] || $("body main > article > div > div > header > div > span:first-child").text(),
+      status: metadataObj?.match(/title:\s?"(.*?)",/)?.[1],
+      rating: metadataObj?.match(/score:\s?(\d{0,2}\.\d{0,2}),/)?.[1],
+      type: metadataObj?.match(/category:\s?.+?name:"(.*?)",/)?.[1],
       cover: $("body main > article > div > div > figure > img").attr("src"),
-      synopsis: metadataObj?.match(/synopsis:\s?"(.*?)",/)?.[1] ||$("body main > article > div > div > div.entry > p").text(),
-      genres: metadataObj?.match(/genres:\s?(.*?)],/)?.[1]?.matchAll(/name:\s?"(.+?)"/g).toArray().map((el)=>el[1].trim()) || $("body main > article > div > div > header > div > a")
-        .map((_, el) => $(el).text().trim())
-        .get(),
-      //next_airing_episode: nextAiringInfo ? JSON.parse(nextAiringInfo)?.[3] : undefined,
+      synopsis: metadataObj?.match(/synopsis:\s?"(.*?)",/)?.[1] || $("body main > article > div > div > div.entry > p").text(),
+      genres: metadataObj?.match(/genres:\s?(.*?)],/)?.[1]?.matchAll(/name:\s?"(.+?)"/g).toArray().map((el) => el[1].trim()) || [],
       episodes: [],
       url,
-      ...(metadataObj?.match(/runtime:\s?(.*?),/)?.[1] !== "null") && { runtime: `${metadataObj?.match(/runtime:\s?(.*?),/)?.[1]}m` || undefined },
-      ...(metadataObj?.match(/trailer:\s?"(.*?)",/)?.[1]) && { trailers: metadataObj?.match(/trailer:\s?"(.*?)",/)?.[1] || undefined }
+      ...(metadataObj?.match(/runtime:\s?(.*?),/)?.[1] !== "null") && { runtime: `${metadataObj?.match(/runtime:\s?(.*?),/)?.[1]}m` },
+      ...(metadataObj?.match(/trailer:\s?"(.*?)",/)?.[1]) && { trailers: metadataObj?.match(/trailer:\s?"(.*?)",/)?.[1] }
     };
-    
-    if (metadataObj?.includes("episodesCount")){
+
+    if (metadataObj?.includes("episodesCount")) {
       const episodesCount = Number(metadataObj?.match(/episodesCount:\s?(\d+),/)?.[1]);
       for (let i = 1; i <= episodesCount; i++) {
-        if (animeInfo.episodes instanceof Array) {
-          animeInfo.episodes.push({
-            number: i,
-            slug: slug + "-" + i,
-            url: ANIMEAV1_BASE + "/media/" + slug + "/" + i
-          });
-        }
+        animeInfo.episodes.push({ number: i, slug: slug + "-" + i, url: ANIMEAV1_BASE + "/media/" + slug + "/" + i });
       }
     }
-    // Alternative titles
-    if (metadataObj?.includes("aka:")){
+
+    if (metadataObj?.includes("aka:")) {
       try {
         const alt_titls = JSON.parse(metadataObj?.match(/aka:\s?({.+?}),/)?.[1]);
         for (const value of Object.values(alt_titls)) {
           animeInfo.alternative_titles.push(value);
         }
       } catch (error) {}
-    } else {
-      $("body main > article > div > div > header > div > h2").each((_, el) => {
-        animeInfo.alternative_titles.push($(el).text());
-      });
     }
 
-    // Relacionados
     const relatedEls = $("body > div > div.container > main > section:nth-child(2) > div > div.gradient-cut > div > div");
     const relatedAnimes = [];
     relatedEls.each((_, el) => {
@@ -426,23 +338,12 @@ async function GetAnimeInfo(slug) {
       const title = $(el).find("h3").text().trim();
       const relation = $(el).find("h3 + span").text().trim();
       if (href && title) {
-        const slug = href.match(/\/media\/([^/]+)/)?.[1] || href;
-        relatedAnimes.push({
-          title,
-          relation,
-          slug,
-          url: `${ANIMEAV1_BASE}${href}`
-        });
+        relatedAnimes.push({ title, relation, slug: href.match(/\/media\/([^/]+)/)?.[1] || href, url: `${ANIMEAV1_BASE}${href}` });
       }
     });
+    if (relatedAnimes.length > 0) animeInfo.related = relatedAnimes;
 
-    // Asigna la propiedad si hay elementos
-    if (relatedAnimes.length > 0) {
-      animeInfo.related = relatedAnimes;
-    }
-
-    // Dates
-    if (metadataObj?.includes("startDate:")){
+    if (metadataObj?.includes("startDate:")) {
       const startDate = Date.parse(metadataObj?.match(/startDate:\s?"(.*?)",/)?.[1]);
       const endDate = Date.parse(metadataObj?.match(/endDate:\s?"(.*?)",/)?.[1]);
       if (!isNaN(startDate)) animeInfo.startDate = new Date(startDate);
@@ -451,74 +352,46 @@ async function GetAnimeInfo(slug) {
 
     return animeInfo;
   } catch (error) {
-    console.error("Error al obtener la información del anime", slug, error);
+    console.error("Error al obtener info del anime", slug, error);
     throw error
   }
 }
-//Adapted from TypeScript from https://github.com/ahmedrangel/animeflv-api/blob/main/server/utils/scrapers/getEpisodeLinks.ts
+
 async function SearchAnimesBySpecificURL(animeAV1URL) {
   try {
     const html = await fetch(decodeURIComponent(animeAV1URL)).then((resp) => {
       if ((!resp.ok) || resp.status !== 200) throw Error(`HTTP error! Status: ${resp.status}`)
-      if (resp === undefined) throw Error(`Undefined response!`)
       return resp.text()
     })
     const $ = cheerio.load(html);
 
-    const search = {
-      currentPage: 1,
-      hasNextPage: false,
-      previousPage: null,
-      nextPage: null,
-      foundPages: 0,
-      media: []
-    };
+    const search = { currentPage: 1, hasNextPage: false, previousPage: null, nextPage: null, foundPages: 0, media: [] };
 
     const pageSelector = $("body > div > div.container > main > section > div > a");
     const getNextAndPrevPages = (selector) => {
       const aTagValue = selector.last().prev().find("a").text();
       const aRef = selector.eq(0).children("a").attr("href");
-
-      let foundPages = 0;
-      let previousPage = "";
-      let nextPage = "";
-
-      if (Number(aTagValue) === 0) foundPages = 1;
-      else foundPages = Number(aTagValue);
-
-      if (aRef === "#" || foundPages == 1) previousPage = null;
-      else previousPage = ANIMEAV1_BASE + aRef;
-
-      if (selector.last().children("a").attr("href") === "#" || foundPages == 1) nextPage = null;
-      else nextPage = ANIMEAV1_BASE + selector.last().children("a").attr("href");
-
+      let foundPages = Number(aTagValue) || 1;
+      let previousPage = (aRef === "#" || foundPages == 1) ? null : ANIMEAV1_BASE + aRef;
+      let nextPage = (selector.last().children("a").attr("href") === "#" || foundPages == 1) ? null : ANIMEAV1_BASE + selector.last().children("a").attr("href");
       return { foundPages, nextPage, previousPage };
     }
     const { foundPages, nextPage, previousPage } = getNextAndPrevPages(pageSelector)
-    const scrapSearchAnimeData = ($) => {
-      const selectedElement = $("body > div > div.container > main > section > div > article");
 
-      if (selectedElement.length > 0) {
-        const mediaVec = [];
-
-        selectedElement.each((_, el) => {
-          mediaVec.push({
-            title: $(el).find("header > h3").text(),
-            cover: $(el).find("div > figure > img").attr("src"),
-            synopsis: $(el).find("div > div > div > p").eq(1).text(),
-            //rating: $(el).find("article > div > p:nth-child(2) > span.Vts.fa-star").text(),
-            slug: $(el).find("a").attr("href").replace("/media/", ""),
-            type: $(el).find("div > figure + div > div").text(),
-            url: ANIMEAV1_BASE + ($(el).find("a").attr("href"))
-          });
+    const selectedElement = $("body > div > div.container > main > section > div > article");
+    if (selectedElement.length > 0) {
+      selectedElement.each((_, el) => {
+        search.media.push({
+          title: $(el).find("header > h3").text(),
+          cover: $(el).find("div > figure > img").attr("src"),
+          synopsis: $(el).find("div > div > div > p").eq(1).text(),
+          slug: $(el).find("a").attr("href").replace("/media/", ""),
+          type: $(el).find("div > figure + div > div").text(),
+          url: ANIMEAV1_BASE + ($(el).find("a").attr("href"))
         });
-        return mediaVec
-      }
-      else {
-        return [];
-      }
+      });
     }
-    search.media.push(...scrapSearchAnimeData($));
+
     search.foundPages = foundPages;
     search.nextPage = nextPage;
     search.previousPage = previousPage;
@@ -526,12 +399,11 @@ async function SearchAnimesBySpecificURL(animeAV1URL) {
     const pageFromQuery = nextPage ? Number(getPage(nextPage)) : previousPage ? Number(getPage(previousPage)) : null;
     const isNextPage = nextPage && pageFromQuery;
     const isPreviousPage = previousPage && pageFromQuery;
-    const inferredPage = isNextPage ? pageFromQuery - 1 : isPreviousPage ? pageFromQuery + 1 : null;
-    search.currentPage = inferredPage || 1;
+    search.currentPage = (isNextPage ? pageFromQuery - 1 : isPreviousPage ? pageFromQuery + 1 : null) || 1;
     search.hasNextPage = nextPage ? true : false;
     return search;
   } catch (error) {
-    console.error("Error al buscar animes por URL:", error);
+    console.error("Error al buscar animes:", error);
     throw error
   }
 }
@@ -539,13 +411,6 @@ async function SearchAnimesBySpecificURL(animeAV1URL) {
 async function GetOnAir() {
   return SearchAnimesBySpecificURL("https://animeav1.com/catalogo?status=emision").then((data) => {
     if (!data || data.media === undefined) throw Error("Invalid response!")
-    return data.media.map((anime) => {
-      return {
-        title: anime.title,
-        type: anime.type,
-        slug: anime.slug,
-        url: anime.url
-      }
-    })
+    return data.media.map((anime) => ({ title: anime.title, type: anime.type, slug: anime.slug, url: anime.url }))
   })
 }

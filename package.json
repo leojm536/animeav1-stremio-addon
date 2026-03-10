@@ -1,7 +1,7 @@
 {
   "name": "animeflv-stremio-addon",
   "version": "1.1.0",
-  "description": "Add AnimeFLV, AnimeAV1 & Henaojara functionallity to Stremio, including catalogs, streams and metadata, even showing upcoming episodes in the calendar! Not affiliated with AnimeFLV, AnimeAV1 or Henaojara. GitHub repo: https://github.com/Pigamer37/animeflv-stremio-addon",
+  "description": "Addon creado por Leo, basado en el addon de Pigamer37 (animeflv-stremio-addon). Provee catalogos, streams y metadata de AnimeAV1 directamente en Stremio. No afiliado con AnimeAV1",
   "main": "index.js",
   "scripts": {
     "devStart": "nodemon index.js --ignore onair_titles.json --ignore onairAV1_titles.json --ignore onairHENAOJARA_titles.json --ignore README",
